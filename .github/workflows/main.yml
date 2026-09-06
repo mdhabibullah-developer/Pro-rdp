@@ -1,0 +1,124 @@
+name: Ultra-RDP-Pro-Edition
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ultra-rdp:
+    runs-on: windows-latest
+    timeout-minutes: 3600
+
+    steps:
+      - name: 🚀 System Hardening & Performance Optimization
+        run: |
+          Write-Host "Starting System Optimization..." -ForegroundColor Cyan
+          
+          # 1. Enable Remote Desktop and Disable NLA
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
+          
+          # 2. Enable IP Forwarding (Crucial for Exit Node)
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name 'IPEnableRouter' -Value 1 -Force
+          
+          # 3. Disable Windows Telemetry & Unnecessary Background Services (Performance Boost)
+          Stop-Service -Name "DiagTrack" -ErrorAction SilentlyContinue
+          Set-Service -Name "DiagTrack" -StartupType Disabled
+          Stop-Service -Name "dmwappushservice" -ErrorAction SilentlyContinue
+          Set-Service -Name "dmwappushservice" -StartupType Disabled
+          
+          # 4. Firewall Configuration
+          netsh advfirewall firewall delete rule name="RDP-Ultra-Pro"
+          netsh advfirewall firewall add rule name="RDP-Ultra-Pro" dir=in action=allow protocol=TCP localport=3389
+          
+          # 5. Apply Changes
+          Restart-Service -Name TermService -Force
+          Write-Host "Optimization Complete!" -ForegroundColor Green
+
+      - name: 🔑 Creating High-Entropy Administrator Account
+        run: |
+          Add-Type -AssemblyName System.Security
+          $charSet = @{
+              Upper   = [char[]](65..90)
+              Lower   = [char[]](97..122)
+              Number  = [char[]](48..57)
+              Special = ([char[]](33..47) + [char[]](58..64) + [char[]](91..96) + [char[]](123..126))
+          }
+          $rawPassword = @()
+          $rawPassword += $charSet.Upper | Get-Random -Count 4
+          $rawPassword += $charSet.Lower | Get-Random -Count 4
+          $rawPassword += $charSet.Number | Get-Random -Count 4
+          $rawPassword += $charSet.Special | Get-Random -Count 4
+          $password = -join ($rawPassword | Sort-Object { Get-Random })
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+          
+          # Using a custom admin name for better security
+          $adminName = "UltraAdmin"
+          New-LocalUser -Name $adminName -Password $securePass -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member $adminName
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $adminName
+          
+          echo "RDP_CREDS=User: $adminName | Password: $password" >> $env:GITHUB_ENV
+          Write-Host "Secure Account Created successfully." -ForegroundColor Green
+
+      - name: 🛠️ Installing Power-User Toolset
+        run: |
+          Write-Host "Installing Power-User Tools via Chocolatey..." -ForegroundColor Cyan
+          # Installing: Chrome, Firefox, VS Code, Git, VLC, 7zip
+          choco install googlechrome firefox vscode git vlc 7zip -y
+          Write-Host "All essential tools installed!" -ForegroundColor Green
+
+      - name: 🌐 Deploying Tailscale Exit Node
+        run: |
+          # Install Tailscale
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installerPath = "$env:TEMP\tailscale.msi"
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
+          Remove-Item $installerPath -Force
+          
+          # Start Tailscale with Exit Node capability
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=ultra-pro-rdp-$env:GITHUB_RUN_ID --advertise-exit-node
+          
+          # Wait for IP
+          $tsIP = $null
+          $retries = 0
+          while (-not $tsIP -and $retries -lt 20) {
+              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+              if (-not $tsIP) { Start-Sleep -Seconds 5; $retries++ }
+          }
+          
+          if (-not $tsIP) {
+              Write-Error "Tailscale IP Assignment failed."
+              exit 1
+          }
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+
+      - name: 📊 Ultimate Access Dashboard
+        run: |
+          Write-Host "`n`n"
+          Write-Host "======================================================================================" -ForegroundColor Magenta
+          Write-Host "   🚀 ULTRA RDP PRO EDITION READY " -ForegroundColor Yellow
+          Write-Host "======================================================================================" -ForegroundColor Magenta
+          Write-Host " 🌐 TAILSCALE IP : $env:TAILSCALE_IP" -ForegroundColor White
+          Write-Host " 👤 USERNAME     : UltraAdmin" -ForegroundColor White
+          Write-Host " 🔑 PASSWORD     : $(echo $env:RDP_CREDS | ForEach-Object { $_.Split('Password: ')[1] })" -ForegroundColor Cyan
+          Write-Host " --------------------------------------------------------------------------------------" -ForegroundColor Magenta
+          Write-Host " ✅ FEATURES ENABLED:" -ForegroundColor Green
+          Write-Host "    - [x] IP Forwarding (Exit Node Ready)" -ForegroundColor White
+          Write-Host "    - [x] System Optimization (Telemetry Disabled)" -ForegroundColor White
+          Write-Host "    - [x] Power-User Tools (Chrome, Firefox, VSCode, Git, VLC, 7zip)" -ForegroundColor White
+          Write-Host "    - [x] Ultra-Secure Administrator Account" -ForegroundColor White
+          Write-Host " --------------------------------------------------------------------------------------" -ForegroundColor Magenta
+          Write-Host " ⚠️  IMPORTANT: Enable 'Use as exit node' in Tailscale Admin Console Settings!" -ForegroundColor Red
+          Write-Host "======================================================================================" -ForegroundColor Magenta
+          Write-Host "`n`n"
+
+      - name: 🔄 Session Keeper (Keep-Alive)
+        run: |
+          Write-Host "Session entered Keep-Alive mode. The runner will remain active..." -ForegroundColor Green
+          while ($true) {
+              $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+              Write-Host "[$time] RDP Session Active | Heartbeat: OK"
+              Start-Sleep -Seconds 300
+          }
