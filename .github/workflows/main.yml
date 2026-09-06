@@ -65,13 +65,13 @@ jobs:
         run: |
           Write-Host "Installing Power-User Tools via Chocolatey..." -ForegroundColor Cyan
           # Installing: Chrome, Firefox, VS Code, Git, VLC, 7zip
-          choco install googlechrome firefox vscode git vlc 7zip -y
+          choco install googlechrome 7zip -y
           Write-Host "All essential tools installed!" -ForegroundColor Green
 
       - name: 🌐 Deploying Tailscale Exit Node
         run: |
           # Install Tailscale
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-latest.msi"
           $installerPath = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
