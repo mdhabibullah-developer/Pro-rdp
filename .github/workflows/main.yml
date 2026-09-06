@@ -71,7 +71,7 @@ jobs:
       - name: 🌐 Deploying Tailscale Exit Node
         run: |
           # Install Tailscale
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-latest.msi"
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.102.3-amd64.msi"
           $installerPath = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
